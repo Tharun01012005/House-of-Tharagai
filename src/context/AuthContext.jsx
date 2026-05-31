@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { supabase } from "../lib/supabase";
+import bcrypt from "bcryptjs";
 
 const AuthContext = createContext(null);
 const SESSION_KEY = "tharagai_session";
@@ -78,10 +79,13 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (payload) => {
     const { name, email, phone, password } = payload;
 
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(password, salt);
+
     // 1. Insert into login_credentials
     const { data: cred, error: credError } = await supabase
       .from("login_credentials")
-      .insert({ email: email.toLowerCase(), password })
+      .insert({ email: email.toLowerCase(), password: hashedPassword })
       .select()
       .single();
 
@@ -119,12 +123,16 @@ export function AuthProvider({ children }) {
   const login = useCallback(async ({ email, password }) => {
     const { data, error } = await supabase
       .from("login_credentials")
-      .select("id, email")
+      .select("id, email, password")
       .eq("email", email.toLowerCase())
-      .eq("password", password)
       .single();
 
     if (error || !data) {
+      throw new Error("Invalid email or password");
+    }
+
+    const isMatch = bcrypt.compareSync(password, data.password);
+    if (!isMatch) {
       throw new Error("Invalid email or password");
     }
 
